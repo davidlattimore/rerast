@@ -12,10 +12,6 @@ in rust-analyzer. It is available either in vscode or from the command line (and
 If you are missing any particular feature that Rerast supported (or didn't), please comment on [this
 issue](https://github.com/rust-analyzer/rust-analyzer/issues/3186).
 
-If you'd like to still use Rerast, we suggest using Rerast version 0.1.88 with Rust version
-nightly-2020-02-27. There are a few newer version of Rerast, but there are some broken features in
-the newer versions.
-
 ## Installation
 
 ```sh

@@ -15,23 +15,22 @@
 // Given two versions of a source file, finds what's changed and builds a Rerast rule to reproduce
 // the change.
 
-extern crate rustc_ast;
+extern crate getopts;
+extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_hir;
-extern crate rustc_middle;
 extern crate rustc_parse;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate syntax;
 
 use crate::errors;
 use crate::errors::RerastErrors;
 use crate::file_loader::{ClonableRealFileLoader, InMemoryFileLoader};
 use crate::CompilerInvocationInfo;
-use rustc_ast::tokenstream::{TokenStream, TokenTree};
+use rustc::ty::{TyCtxt, TyKind};
 use rustc_hir::intravisit;
 use rustc_interface::interface;
-use rustc_middle::ty::subst::GenericArgKind;
-use rustc_middle::ty::{TyCtxt, TyKind};
 use rustc_session::parse::ParseSess;
 use rustc_span::source_map::{FileLoader, FilePathMapping, SourceMap};
 use rustc_span::{BytePos, Pos, Span, SyntaxContext};
@@ -42,6 +41,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use syntax::tokenstream::{TokenStream, TokenTree};
 
 struct PlaceholderCandidate<T> {
     hash: u64,
@@ -135,10 +135,10 @@ impl<'tcx, T, F> intravisit::Visitor<'tcx> for PlaceholderCandidateFinder<'tcx, 
 where
     F: Fn(&'tcx rustc_hir::Expr<'tcx>) -> T,
 {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_expr(&mut self, expr: &'tcx rustc_hir::Expr<'tcx>) {
@@ -256,7 +256,7 @@ struct FindRulesState {
 impl rustc_driver::Callbacks for FindRulesState {
     fn config(&mut self, config: &mut rustc_interface::interface::Config) {
         config.diagnostic_output =
-            rustc_session::DiagnosticOutput::Raw(Box::new(self.diagnostic_output.clone()));
+            rustc::session::DiagnosticOutput::Raw(Box::new(self.diagnostic_output.clone()));
     }
 
     fn after_analysis<'tcx>(
@@ -268,7 +268,7 @@ impl rustc_driver::Callbacks for FindRulesState {
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             let source_map = tcx.sess.source_map();
             let maybe_filemap = source_map.get_source_file(&rustc_span::FileName::Real(
-                rustc_span::RealFileName::Named(PathBuf::from(&self.modified_file_name)),
+                PathBuf::from(&self.modified_file_name),
             ));
             let filemap = if let Some(f) = maybe_filemap {
                 f
@@ -383,11 +383,9 @@ fn build_rule<'a, 'tcx: 'a>(
     let mut uses_type_params = false;
     for ph in placeholders {
         let ph_ty = type_tables.expr_ty(ph.expr);
-        for generic in ph_ty.walk() {
-            if let GenericArgKind::Type(subtype) = generic.unpack() {
-                if let TyKind::Param(..) = subtype.kind {
-                    uses_type_params = true;
-                }
+        for subtype in ph_ty.walk() {
+            if let TyKind::Param(..) = subtype.kind {
+                uses_type_params = true;
             }
         }
     }
@@ -565,10 +563,10 @@ impl<'tcx> ReferencedPathsFinder<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for ReferencedPathsFinder<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_path(&mut self, path: &'tcx rustc_hir::Path, _: rustc_hir::HirId) {
@@ -600,10 +598,10 @@ struct RuleFinder<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for RuleFinder<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item) {

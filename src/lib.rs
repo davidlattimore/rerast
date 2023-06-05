@@ -71,17 +71,19 @@
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
+extern crate getopts;
+
 use rerast_macros;
-extern crate rustc_ast;
+extern crate rustc;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_hir;
 extern crate rustc_infer;
 extern crate rustc_interface;
-extern crate rustc_middle;
 extern crate rustc_parse;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate syntax;
 
 pub mod change_to_rule;
 pub mod chunked_diff;
@@ -100,10 +102,10 @@ use crate::errors::RerastErrors;
 use crate::file_loader::InMemoryFileLoader;
 use crate::rule_finder::StartMatch;
 use crate::rules::Rules;
+use rustc::ty::TyCtxt;
 use rustc_hir::intravisit;
 use rustc_hir::HirId;
 use rustc_interface::interface;
-use rustc_middle::ty::TyCtxt;
 use rustc_span::source_map::FileLoader;
 use rustc_span::source_map::{self, SourceMap};
 use rustc_span::symbol::Symbol;
@@ -159,7 +161,7 @@ impl CompilerInvocationInfo {
         for (k, v) in &self.env {
             std::env::set_var(k, v);
         }
-        rustc_ast::with_default_globals(|| {
+        syntax::with_default_globals(|| {
             rustc_driver::run_compiler(&self.args, callbacks, file_loader, None)
         })?;
         for k in self.env.keys() {
@@ -327,7 +329,7 @@ struct RerastCompilerCallbacks {
 impl rustc_driver::Callbacks for RerastCompilerCallbacks {
     fn config(&mut self, config: &mut rustc_interface::interface::Config) {
         config.diagnostic_output =
-            rustc_session::DiagnosticOutput::Raw(Box::new(self.diagnostic_output.clone()));
+            rustc::session::DiagnosticOutput::Raw(Box::new(self.diagnostic_output.clone()));
     }
 
     fn after_analysis<'tcx>(
@@ -352,10 +354,8 @@ fn find_and_apply_rules<'a, 'tcx>(
         Some(r) => r,
         None => {
             if config.verbose {
-                if let rustc_span::FileName::Real(filename) = tcx
-                    .sess
-                    .source_map()
-                    .span_to_filename(krate.item.module.inner)
+                if let rustc_span::FileName::Real(filename) =
+                    tcx.sess.source_map().span_to_filename(krate.module.inner)
                 {
                     println!(
                         "A build target was skipped due to apparently being empty: {:?}",
@@ -405,10 +405,10 @@ impl<'tcx> DeclaredNamesFinder<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for DeclaredNamesFinder<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_pat(&mut self, pat: &'tcx rustc_hir::Pat) {
@@ -751,6 +751,10 @@ mod tests {
             false
         }
 
+        fn abs_path(&self, _: &Path) -> Option<PathBuf> {
+            None
+        }
+
         fn read_file(&self, path: &Path) -> io::Result<String> {
             match path.to_str() {
                 Some(path_str) => Err(io::Error::new(
@@ -1086,7 +1090,6 @@ mod tests {
 
     // Make sure a UFCS search pattern matches non-UFCS code.
     #[test]
-    #[ignore] // Broken by change in rustc. Not sure how to fix it.
     fn ufcs_search_non_ufcs_code() {
         check(
             "",
@@ -1098,7 +1101,6 @@ mod tests {
 
     // Make sure a non-UFCS search pattern matches UFCS code.
     #[test]
-    #[ignore] // Broken by change in rustc. Not sure how to fix it.
     fn non_ufcs_search_ufcs_code() {
         check(
             "",
@@ -1328,7 +1330,6 @@ mod tests {
     // extra ; - search this crate for ends_with(";") - there's a workaround for macros consuming
     // semicolons that follow them and the workaround may no longer be necessary.
     #[test]
-    #[ignore] // Broken by change in rustc. Not sure how to fix it.
     fn match_macro_replace_question_mark() {
         TestBuilder::new()
             .edition("2015") // try is a keyword in 2018
@@ -1345,7 +1346,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Broken by change in rustc. Not sure how to fix it.
     fn replace_try_2018() {
         TestBuilder::new()
             .edition("2018")

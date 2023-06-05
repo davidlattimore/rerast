@@ -18,20 +18,21 @@ use crate::definitions::RerastDefinitions;
 use crate::rule_finder::StartMatch;
 use crate::rules::{Rule, Rules};
 use crate::Config;
-use rustc_ast::{self, ast};
+use rustc::traits::ObligationCause;
+use rustc::ty::subst::Subst;
+use rustc::ty::{self, TyCtxt};
 use rustc_hir;
 use rustc_hir::intravisit;
 use rustc_hir::HirId;
 use rustc_infer::infer::{self, InferCtxt, TyCtxtInferExt};
-use rustc_middle::traits::ObligationCause;
-use rustc_middle::ty::subst::Subst;
-use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::source_map::{self, Spanned};
 use rustc_span::symbol::Symbol;
 use rustc_span::{Span, SpanSnippetError, DUMMY_SP};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem;
+use syntax;
+use syntax::ast;
 
 #[macro_export]
 macro_rules! debug {
@@ -124,7 +125,7 @@ impl<'r, 'tcx> RuleMatcher<'r, 'tcx> {
         original_span: Span,
         rule: &'r Rule<'tcx, T>,
     ) -> Option<Match<'r, 'tcx, T>> {
-        let rule_fn_id = self.tcx.hir().body_owner_def_id(rule.body_id).to_def_id();
+        let rule_fn_id = self.tcx.hir().body_owner_def_id(rule.body_id);
         let rule_tables = self.tcx.body_tables(rule.body_id);
 
         let maybe_match_placeholders = self.tcx.infer_ctxt().enter(|infcx| {
@@ -215,10 +216,10 @@ impl<'r, 'tcx> RuleMatcher<'r, 'tcx> {
 }
 
 impl<'r, 'tcx> intravisit::Visitor<'tcx> for RuleMatcher<'r, 'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item) {
@@ -369,7 +370,7 @@ impl<'r, 'a, 'tcx: 'a> MatchState<'r, 'a, 'tcx> {
         method_call_id: HirId,
         method_type_tables: &ty::TypeckTables<'tcx>,
     ) -> bool {
-        if let Some(Ok((rustc_hir::def::DefKind::Fn, method_id))) =
+        if let Some(Ok((rustc_hir::def::DefKind::Method, method_id))) =
             fn_type_tables.type_dependent_defs().get(fn_expr.hir_id)
         {
             if let Ok((_, method_def_id)) = method_type_tables.type_dependent_defs()[method_call_id]
@@ -470,7 +471,7 @@ impl<T: Matchable> Matchable for [T] {
     }
 }
 
-impl<T: Matchable> Matchable for rustc_ast::ptr::P<T> {
+impl<T: Matchable> Matchable for syntax::ptr::P<T> {
     fn attempt_match<'r, 'a, 'tcx>(
         &self,
         state: &mut MatchState<'r, 'a, 'tcx>,
@@ -1009,7 +1010,7 @@ impl Matchable for rustc_hir::Destination {
     }
 }
 
-impl Matchable for rustc_ast::ast::Label {
+impl Matchable for syntax::ast::Label {
     fn attempt_match<'r, 'a, 'tcx>(
         &self,
         state: &mut MatchState<'r, 'a, 'tcx>,
@@ -1019,7 +1020,7 @@ impl Matchable for rustc_ast::ast::Label {
     }
 }
 
-impl Matchable for rustc_span::symbol::Ident {
+impl Matchable for ast::Ident {
     fn attempt_match<'r, 'a, 'tcx>(
         &self,
         state: &mut MatchState<'r, 'a, 'tcx>,
@@ -1631,10 +1632,10 @@ impl<'r, 'tcx, T: StartMatch<'tcx>> ReplacementVisitor<'r, 'tcx, T> {
 }
 
 impl<'r, 'tcx, T: StartMatch<'tcx>> intravisit::Visitor<'tcx> for ReplacementVisitor<'r, 'tcx, T> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_expr(&mut self, expr: &'tcx rustc_hir::Expr) {

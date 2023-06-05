@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rustc::ty::{self, TyCtxt};
 use rustc_hir;
 use rustc_hir::intravisit;
-use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::symbol::Symbol;
 
 #[derive(Copy, Clone)]
@@ -60,10 +60,10 @@ impl<'tcx> RerastDefinitionsFinder<'tcx> {
 // This would be a little easier if there were a way to find functions by name. There's probably
 // something I've missed, but so far I haven't found one.
 impl<'tcx> intravisit::Visitor<'tcx> for RerastDefinitionsFinder<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
 
     fn visit_item(&mut self, item: &'tcx rustc_hir::Item) {
@@ -80,7 +80,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for RerastDefinitionsFinder<'tcx> {
 
     fn visit_body(&mut self, body: &'tcx rustc_hir::Body) {
         let fn_id = self.tcx.hir().body_owner_def_id(body.id());
-        if self.tcx.item_name(fn_id.to_def_id()) == self.rerast_types_symbol {
+        if self.tcx.item_name(fn_id) == self.rerast_types_symbol {
             let tables = self.tcx.typeck_tables_of(fn_id);
             let mut types = body.params.iter().map(|arg| tables.node_type(arg.hir_id));
             self.definitions = Some(RerastDefinitions {

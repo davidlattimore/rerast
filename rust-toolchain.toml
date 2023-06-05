@@ -1,0 +1,5 @@
+[toolchain]
+channel = "nightly-2020-02-27"
+components = [ "rustc-dev" ]
+profile = "minimal"
+

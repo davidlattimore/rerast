@@ -16,9 +16,9 @@ use super::hir_id_from_path;
 use crate::errors::ErrorWithSpan;
 use crate::rule_finder::StartMatch;
 use crate::rules::Rule;
+use rustc::ty::TyCtxt;
 use rustc_hir::intravisit;
 use rustc_hir::{self, HirId};
-use rustc_middle::ty::TyCtxt;
 use rustc_span::Span;
 use std::collections::HashSet;
 
@@ -66,10 +66,10 @@ struct SearchValidator<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for SearchValidator<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.state.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.state.tcx.hir())
     }
 
     fn visit_qpath(&mut self, qpath: &'tcx rustc_hir::QPath, id: rustc_hir::HirId, span: Span) {
@@ -92,10 +92,10 @@ struct ReplacementValidator<'tcx> {
 }
 
 impl<'tcx> intravisit::Visitor<'tcx> for ReplacementValidator<'tcx> {
-    type Map = rustc_middle::hir::map::Map<'tcx>;
+    type Map = rustc::hir::map::Map<'tcx>;
 
-    fn nested_visit_map(&mut self) -> intravisit::NestedVisitorMap<Self::Map> {
-        intravisit::NestedVisitorMap::All(self.state.tcx.hir())
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, Self::Map> {
+        intravisit::NestedVisitorMap::All(&self.state.tcx.hir())
     }
 
     fn visit_qpath(&mut self, qpath: &'tcx rustc_hir::QPath, id: rustc_hir::HirId, span: Span) {
